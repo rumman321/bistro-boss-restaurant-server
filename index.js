@@ -316,7 +316,7 @@ async function run() {
       // console.log('iniResponse', iniResponse);
       const saveData = await paymentCollection.insertOne(payment);
       const gatewayUrl = iniResponse?.data?.GatewayPageURL;
-      console.log(gatewayUrl);
+      // console.log(gatewayUrl);
 
       res.send({ gatewayUrl });
     });
@@ -336,6 +336,16 @@ async function run() {
           status:'success'
         }
       })
+      //carefully delete each item from the cart
+      const payment = await paymentCollection.findOne({transactionId:data.tran_id})
+      const query = {
+        _id: {
+          $in: payment.cartIds.map((id) => new ObjectId(id)),
+        },
+      };
+      const deleteResult = await cartCollection.deleteMany(query);
+
+      res.redirect('http://localhost:5173/success')
       
     });
     //stats or analytics
