@@ -7,12 +7,11 @@ const cors = require("cors");
 const formData = require("form-data");
 const nodemailer = require("nodemailer");
 
-
 const transporter = nodemailer.createTransport({
-  service:'gmail',
+  service: "gmail",
   auth: {
-    user: 'rrmahfuz5@gmail.com', // SMTP username
-    pass: process.env.EMAIL_API_PASS , // SMTP password
+    user: "rrmahfuz5@gmail.com", // SMTP username
+    pass: process.env.EMAIL_API_PASS, // SMTP password
   },
 });
 // console.log("mg consloe", mg);
@@ -22,6 +21,8 @@ const port = process.env.PORT || 5000;
 //middleware
 app.use(cors());
 app.use(express.json());
+//urlencoded data format response ta dey tai ai middleware
+app.use(express.urlencoded());
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const { default: axios } = require("axios");
@@ -29,11 +30,8 @@ const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster
 // Store ID: brist67a04b48c0666
 // Store Password (API/Secret Key): brist67a04b48c0666@ssl
 
-
 // Merchant Panel URL: https://sandbox.sslcommerz.com/manage/ (Credential as you inputted in the time of registration)
 
-
- 
 // Store name: testbristry83
 // Registered URL: www.bristoboss.com
 // Session API to generate transaction: https://sandbox.sslcommerz.com/gwprocess/v3/api.php
@@ -242,12 +240,12 @@ async function run() {
       };
       const deleteResult = await cartCollection.deleteMany(query);
       //send userEmail payment confirm
-     
+
       const mailOptions = {
-        from: `rrmahfuz5@gmail.com`, 
-        to:"rrmahfuz5@gmail.com",
-        subject:'BRISTO-BOSS-PAYMENT-CONFIRM',
-        text:'YOUR ORDER IS ON THE WAY',
+        from: `rrmahfuz5@gmail.com`,
+        to: "rrmahfuz5@gmail.com",
+        subject: "BRISTO-BOSS-PAYMENT-CONFIRM",
+        text: "YOUR ORDER IS ON THE WAY",
       };
       try {
         const info = await transporter.sendMail(mailOptions);
@@ -269,59 +267,71 @@ async function run() {
       res.send(result);
     });
     //sslcommerz payment apis
-    app.post("/create-ssl-payment", async(req,res)=>{
-      const payment =req.body
-      console.log("sslPaymentInfo",payment);
-      const trxId = new ObjectId().toString()
-      payment.transactionIds=trxId
+    app.post("/create-ssl-payment", async (req, res) => {
+      const payment = req.body;
+      console.log("sslPaymentInfo", payment);
+      const trxId = new ObjectId().toString();
+      payment.transactionIds = trxId;
       const Initiate = {
-        store_id:"brist67a04b48c0666",
-        store_passwd:"brist67a04b48c0666@ssl",
+        store_id: "brist67a04b48c0666",
+        store_passwd: "brist67a04b48c0666@ssl",
         total_amount: payment?.price,
-        currency: 'BDT',
+        currency: "BDT",
         tran_id: trxId, // use unique tran_id for each api call
-        success_url: 'http://localhost:5001/success',
-        fail_url: 'http://localhost:5173/fail',
-        cancel_url: 'http://localhost:5173/cancel',
-        ipn_url: 'http://localhost:5001/ipn-success',
-        shipping_method: 'Courier',
-        product_name: 'Computer.',
-        product_category: 'Electronic',
-        product_profile: 'general',
-        cus_name: 'Customer Name',
+        success_url: "http://localhost:5000/success-payment",
+        fail_url: "http://localhost:5173/fail-payment",
+        cancel_url: "http://localhost:5173/cancel-payment",
+        ipn_url: "http://localhost:5000/ipn-success",
+        shipping_method: "Courier",
+        product_name: "Computer.",
+        product_category: "Electronic",
+        product_profile: "general",
+        cus_name: "Customer Name",
         cus_email: `${payment?.email}`,
-        cus_add1: 'Dhaka',
-        cus_add2: 'Dhaka',
-        cus_city: 'Dhaka',
-        cus_state: 'Dhaka',
-        cus_postcode: '1000',
-        cus_country: 'Bangladesh',
-        cus_phone: '01711111111',
-        cus_fax: '01711111111',
-        ship_name: 'Customer Name',
-        ship_add1: 'Dhaka',
-        ship_add2: 'Dhaka',
-        ship_city: 'Dhaka',
-        ship_state: 'Dhaka',
+        cus_add1: "Dhaka",
+        cus_add2: "Dhaka",
+        cus_city: "Dhaka",
+        cus_state: "Dhaka",
+        cus_postcode: "1000",
+        cus_country: "Bangladesh",
+        cus_phone: "01711111111",
+        cus_fax: "01711111111",
+        ship_name: "Customer Name",
+        ship_add1: "Dhaka",
+        ship_add2: "Dhaka",
+        ship_city: "Dhaka",
+        ship_state: "Dhaka",
         ship_postcode: 1000,
-        ship_country: 'Bangladesh',
-    };
-    const iniResponse = await axios({
-      url: 'https://sandbox.sslcommerz.com/gwprocess/v4/api.php',
-      method:'POST',
-      data:Initiate,
-      headers:{
-        'Content-Type':'application/x-www-form-urlencoded',
+        ship_country: "Bangladesh",
+      };
+      const iniResponse = await axios({
+        url: "https://sandbox.sslcommerz.com/gwprocess/v4/api.php",
+        method: "POST",
+        data: Initiate,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      });
+
+      // console.log('iniResponse', iniResponse);
+      const saveData = await paymentCollection.insertOne(payment);
+      const gatewayUrl = iniResponse?.data?.GatewayPageURL;
+      console.log(gatewayUrl);
+
+      res.send({ gatewayUrl });
+    });
+    app.post("/success-payment", async (req, res) => {
+      const paymentSuccess = req.body;
+      console.log("success info", paymentSuccess);
+      //validation part
+      const {data} = await axios.get(
+        `https://sandbox.sslcommerz.com/validator/api/validationserverAPI.php?val_id=${paymentSuccess.val_id}&store_id=brist67a04b48c0666&store_passwd=brist67a04b48c0666@ssl&format=json`
+      );
+      if(data.status !=='VALID'){
+        return res.send({message: "Invalid payment"})
       }
-    })
-    // console.log('iniResponse', iniResponse);
-    const saveData = await paymentCollection.insertOne(payment)
-    const gatewayUrl= iniResponse?.data?.GatewayPageURL
-    console.log(gatewayUrl);
-
-    res.send({gatewayUrl})
-
-    })
+      
+    });
     //stats or analytics
     app.get("/admin-stats", verifyToken, verifyAdmin, async (req, res) => {
       const users = await userCollection.estimatedDocumentCount();
