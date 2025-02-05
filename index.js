@@ -271,7 +271,7 @@ async function run() {
       const payment = req.body;
       console.log("sslPaymentInfo", payment);
       const trxId = new ObjectId().toString();
-      payment.transactionIds = trxId;
+      payment.transactionId = trxId;
       const Initiate = {
         store_id: "brist67a04b48c0666",
         store_passwd: "brist67a04b48c0666@ssl",
@@ -330,6 +330,12 @@ async function run() {
       if(data.status !=='VALID'){
         return res.send({message: "Invalid payment"})
       }
+      // filter/query and updatedDoc er kaj ta amra single line e updateOne er vitor korlm
+      const updatePayment = await paymentCollection.updateOne({transactionId:data.tran_id},{
+        $set:{
+          status:'success'
+        }
+      })
       
     });
     //stats or analytics
