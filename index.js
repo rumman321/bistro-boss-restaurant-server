@@ -24,6 +24,7 @@ app.use(cors());
 app.use(express.json());
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const { default: axios } = require("axios");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.hhac7.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 // Store ID: brist67a04b48c0666
 // Store Password (API/Secret Key): brist67a04b48c0666@ssl
@@ -272,16 +273,17 @@ async function run() {
       const payment =req.body
       console.log("sslPaymentInfo",payment);
       const trxId = new ObjectId().toString()
+      payment.transactionIds=trxId
       const Initiate = {
         store_id:"brist67a04b48c0666",
         store_passwd:"brist67a04b48c0666@ssl",
         total_amount: payment?.price,
         currency: 'BDT',
         tran_id: trxId, // use unique tran_id for each api call
-        success_url: 'http://localhost:3030/success',
-        fail_url: 'http://localhost:3030/fail',
-        cancel_url: 'http://localhost:3030/cancel',
-        ipn_url: 'http://localhost:3030/ipn-success',
+        success_url: 'http://localhost:5001/success',
+        fail_url: 'http://localhost:5173/fail',
+        cancel_url: 'http://localhost:5173/cancel',
+        ipn_url: 'http://localhost:5001/ipn-success',
         shipping_method: 'Courier',
         product_name: 'Computer.',
         product_category: 'Electronic',
@@ -312,6 +314,13 @@ async function run() {
         'Content-Type':'application/x-www-form-urlencoded',
       }
     })
+    // console.log('iniResponse', iniResponse);
+    const saveData = await paymentCollection.insertOne(payment)
+    const gatewayUrl= iniResponse?.data?.GatewayPageURL
+    console.log(gatewayUrl);
+
+    res.send({gatewayUrl})
+
     })
     //stats or analytics
     app.get("/admin-stats", verifyToken, verifyAdmin, async (req, res) => {
