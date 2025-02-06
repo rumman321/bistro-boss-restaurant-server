@@ -205,7 +205,7 @@ async function run() {
       const result = await cartCollection.find(query).toArray();
       res.send(result);
     });
-    app.delete("/carts/:id", verifyToken, verifyAdmin, async (req, res) => {
+    app.delete("/carts/:id", verifyToken,  async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await cartCollection.deleteOne(query);
@@ -229,6 +229,7 @@ async function run() {
     //payment apis
     app.post("/payments", async (req, res) => {
       const payment = req.body;
+      // console.log('paymentemail', payment);
       const paymentResult = await paymentCollection.insertOne(payment);
 
       // console.log("payment info", payment);
@@ -243,19 +244,19 @@ async function run() {
 
       const mailOptions = {
         from: `rrmahfuz5@gmail.com`,
-        to: "rrmahfuz5@gmail.com",
+        to: `${payment.email}`,
         subject: "BRISTO-BOSS-PAYMENT-CONFIRM",
         text: "YOUR ORDER IS ON THE WAY",
       };
       try {
         const info = await transporter.sendMail(mailOptions);
-        console.log("Email sent: ", info.messageId);
-        return info;
+        // console.log("Email sent: ", info.messageId);
+        res.send({ paymentResult, deleteResult });
+        // return info;
       } catch (error) {
         console.error("Error sending email: ", error);
         throw error;
       }
-      res.send({ paymentResult, deleteResult });
     });
 
     app.get("/payments/:email", verifyToken, async (req, res) => {
@@ -269,12 +270,13 @@ async function run() {
     //sslcommerz payment apis
     app.post("/create-ssl-payment", async (req, res) => {
       const payment = req.body;
-      console.log("sslPaymentInfo", payment);
+      // console.log("sslPaymentInfo", payment);
       const trxId = new ObjectId().toString();
       payment.transactionId = trxId;
+      //step-1: create initiate
       const Initiate = {
-        store_id: "brist67a04b48c0666",
-        store_passwd: "brist67a04b48c0666@ssl",
+        store_id: process.env.STORE_ID_SSL,
+        store_passwd: process.env.STORE_PASS_SSL,
         total_amount: payment?.price,
         currency: "BDT",
         tran_id: trxId, // use unique tran_id for each api call
@@ -304,6 +306,7 @@ async function run() {
         ship_postcode: 1000,
         ship_country: "Bangladesh",
       };
+      //step-2:send the request to sslcommerz payment gateway
       const iniResponse = await axios({
         url: "https://sandbox.sslcommerz.com/gwprocess/v4/api.php",
         method: "POST",
@@ -315,38 +318,62 @@ async function run() {
 
       // console.log('iniResponse', iniResponse);
       const saveData = await paymentCollection.insertOne(payment);
+      //step-3:get the url for payment
       const gatewayUrl = iniResponse?.data?.GatewayPageURL;
       // console.log(gatewayUrl);
-
+      //step-4 redirect the customer to the gateway
       res.send({ gatewayUrl });
     });
     app.post("/success-payment", async (req, res) => {
+      //step-5:success payment data
       const paymentSuccess = req.body;
-      console.log("success info", paymentSuccess);
-      //validation part
-      const {data} = await axios.get(
+      // console.log("success info", paymentSuccess);
+      //step-6:validation part
+      const { data } = await axios.get(
         `https://sandbox.sslcommerz.com/validator/api/validationserverAPI.php?val_id=${paymentSuccess.val_id}&store_id=brist67a04b48c0666&store_passwd=brist67a04b48c0666@ssl&format=json`
       );
-      if(data.status !=='VALID'){
-        return res.send({message: "Invalid payment"})
+      if (data.status !== "VALID") {
+        return res.send({ message: "Invalid payment" });
       }
+      //step-7:update payment database
       // filter/query and updatedDoc er kaj ta amra single line e updateOne er vitor korlm
-      const updatePayment = await paymentCollection.updateOne({transactionId:data.tran_id},{
-        $set:{
-          status:'success'
+      const updatePayment = await paymentCollection.updateOne(
+        { transactionId: data.tran_id },
+        {
+          $set: {
+            status: "success",
+          },
         }
-      })
+      );
+      //step-8:find the payment for more functionality
       //carefully delete each item from the cart
-      const payment = await paymentCollection.findOne({transactionId:data.tran_id})
+      const payment = await paymentCollection.findOne({
+        transactionId: data.tran_id,
+      });
       const query = {
         _id: {
           $in: payment.cartIds.map((id) => new ObjectId(id)),
         },
       };
+      //step-9:delete cart items and redirect success route
       const deleteResult = await cartCollection.deleteMany(query);
+      //send userEmail payment confirm
 
-      res.redirect('http://localhost:5173/success')
-      
+      const mailOptions = {
+        from: `rrmahfuz5@gmail.com`,
+        to: `rrmahfuz5@gmail.com`,
+        subject: "BRISTO-BOSS-PAYMENT-SUCCESS WITH SSLCOMMERZ",
+        text: "YOUR ORDER IS ON THE WAY",
+      };
+      try {
+        const info = await transporter.sendMail(mailOptions);
+        // console.log("Email sent: ", info.messageId);
+        res.redirect("http://localhost:5173/dashboard/paymentHistory");
+        // return info;
+      } catch (error) {
+        console.error("Error sending email: ", error);
+        throw error;
+      }
     });
     //stats or analytics
     app.get("/admin-stats", verifyToken, verifyAdmin, async (req, res) => {
